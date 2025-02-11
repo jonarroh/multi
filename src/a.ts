@@ -1,230 +1,157 @@
-import { z, ZodString } from 'zod'
-
-// Definimos el tipo para cada regla de validación
-type RegexRule = {
-  regex: RegExp;
-  message?: string;
-};
-
-type RefineRule = {
-  test: (value: string) => boolean;
-  message?: string;
-};
-
-interface PasswordRules {
-  minLength?: number;
-  regexRules?: RegexRule[];
-  refineRules?: RefineRule[];
+//zod clone
+interface LinError {
+	code: string;
+	message: string;
+	type: string | number | boolean | object | null | undefined;
+	path: string;
 }
 
-// Función que export construye el esquema a partir de las reglas proporcionadas
-export const createPasswordSchema = (rules: PasswordRules = {}): ZodString => {
-  let schema = z.string();
+type Result<T> =
+	| { isValid: true; data: T }
+	| { isValid: false; errors: LinError[] };
 
-  // Agregamos la validación de longitud mínima
-  if (rules.minLength) {
-    schema = schema.min(rules.minLength, {
-      message: `La contraseña debe tener al menos ${rules.minLength} caracteres`,
-    });
-  }
+export class L {
+	private constructor() {}
 
-  // Agregamos cada regla de expresión regular
-  rules.regexRules?.forEach(rule => {
-    schema = schema.regex(rule.regex, { message: rule.message });
-  });
+	public static String() {
+		return new LString();
+	}
 
-  // Agregamos cada validación personalizada (refine)
-  rules.refineRules?.forEach(rule => {
-    schema = schema.refine(rule.test, { message: rule.message }) as unknown as ZodString;
-  });
+	public static MultiParse(
+		...inputs: {
+			value: unknown;
+			schema: LString;
+			fase: string;
+		}[]
+	): Result<unknown> {
+		const errors: LinError[] = [];
 
-  return schema;
-};
+		for (const { value, schema, fase } of inputs) {
+			const result = schema.parse(value);
 
-export const passwordPhase1 = createPasswordSchema({ minLength: 6 });
-export const passwordPhase2 = createPasswordSchema({
-  minLength: 6,
-  regexRules: [
-    { regex: /\d/, message: 'Debe contener al menos un número' }
-  ]
-});
-export const passwordPhase3 = createPasswordSchema({
-  minLength: 6,
-  regexRules: [
-    { regex: /\d/, message: 'Debe contener al menos un número' },
-    { regex: /\W/, message: 'Debe contener al menos un carácter especial' }
-  ]
-});
-export const passwordPhase4 = createPasswordSchema({
-  minLength: 6,
-  regexRules: [
-    { regex: /\d/, message: 'Debe contener al menos un número' },
-    { regex: /\W/, message: 'Debe contener al menos un carácter especial' },
-    { regex: /[A-Z]/, message: 'Debe contener al menos una letra mayúscula' }
-  ]
-});
+			if (!result.isValid) {
+				for (const error of result.errors) {
+					errors.push({
+						...error,
+						path: fase // Asignamos el nombre de la fase al path del error
+					});
+				}
+			}
+		}
 
-// Se define la expresión regular para un elemento químico.
-// (La siguiente regex es un ejemplo; asegúrate de ajustarla según tus necesidades)
-export const chemicalElementRegex = /H|He|Li|Be|B|C|N|O|F|Ne|Na|Mg|Al|Si|P|S|Cl|Ar|K|Ca|Sc|Ti|V|Cr|Mn|Fe|Co|Ni|Cu|Zn|Ga|Ge|As|Se|Br|Kr|Rb|Sr|Y|Zr|Nb|Mo|Tc|Ru|Rh|Pd|Ag|Cd|In|Sn|Sb|Te|I|Xe|Cs|Ba|La|Ce|Pr|Nd|Pm|Sm|Eu|Gd|Tb|Dy|Ho|Er|Tm|Yb|Lu|Hf|Ta|W|Re|Os|Ir|Pt|Au|Hg|Tl|Pb|Bi|Po|At|Rn|Fr|Ra|Ac|Th|Pa|U|Np|Pu|Am|Cm|Bk|Cf|Es|Fm|Md|No|Lr|Rf|Db|Sg|Bh|Hs|Mt|Ds|Rg|Cn|Nh|Fl|Mc|Lv|Ts|Og/;
+		return errors.length > 0
+			? { isValid: false, errors }
+			: { isValid: true, data: null };
+	}
+}
 
-export const passwordPhase5 = createPasswordSchema({
-  minLength: 6,
-  regexRules: [
-    { regex: /\d/, message: 'Debe contener al menos un número' },
-    { regex: /\W/, message: 'Debe contener al menos un carácter especial' },
-    { regex: /[A-Z]/, message: 'Debe contener al menos una letra mayúscula' },
-    { regex: chemicalElementRegex, message: 'Debe contener al menos un elemento químico' }
-  ]
-});
-export const passwordPhase6 = createPasswordSchema({
-  minLength: 6,
-  regexRules: [
-    { regex: /\d/, message: 'Debe contener al menos un número' },
-    { regex: /\W/, message: 'Debe contener al menos un carácter especial' },
-    { regex: /[A-Z]/, message: 'Debe contener al menos una letra mayúscula' },
-    { regex: chemicalElementRegex, message: 'Debe contener al menos un elemento químico' }
-  ],
-  refineRules: [
-    {
-      test: (value) => {
-        // Se extraen todos los dígitos y se suman
-        export const numbers = value.match(/\d/g) || [];
-        export const sum = numbers.reduce((acc, digit) => acc + parseInt(digit, 10), 0);
-        return sum === 100;
-      },
-      message: 'La suma de los dígitos debe ser 100'
-    }
-  ]
-});
+class LString {
+	private _min?: number;
+	private _max?: number;
+	private _regex?: RegExp;
+	private _refines: Array<(value: string) => boolean> = [];
+	private _minMessage: string = 'Must be at least {min} characters';
+	private _maxMessage: string = 'Must be at most {max} characters';
+	private _regexMessage: string = 'Does not match pattern';
+	private _refineMessage: string = 'Custom refinement check failed';
 
-export const passwordPhase7 = createPasswordSchema({
-  minLength: 6,
-  regexRules: [
-    { regex: /\d/, message: 'Debe contener al menos un número' },
-    { regex: /\W/, message: 'Debe contener al menos un carácter especial' },
-    { regex: /[A-Z]/, message: 'Debe contener al menos una letra mayúscula' },
-    { regex: chemicalElementRegex, message: 'Debe contener al menos un elemento químico' },
-    { regex: eggEmojiRegex, message: 'Debe contener al menos un emoji de huevo' }
-  ],
-  refineRules: [
-    {
-      test: (value) => {
-        // Se extraen todos los dígitos y se suman
-        export const numbers = value.match(/\d/g) || [];
-        export const sum = numbers.reduce((acc, digit) => acc + parseInt(digit, 10), 0);
-        return sum === 100;
-      },
-      message: 'La suma de los dígitos debe ser 100'
-    }
-  ],
-  
-});
+	min(length: number, message?: string) {
+		this._min = length;
+		if (message) this._minMessage = message;
+		return this;
+	}
 
-// face 8 next to the egg emoji, the password must have a spotlight emoji
-export const spotlightNextToEggEmojiRegex = /🥚🔦|🔦🥚/
-export const passwordPhase8 = createPasswordSchema({
-  minLength: 6,
-  regexRules: [
-    { regex: /\d/, message: 'Debe contener al menos un número' },
-    { regex: /\W/, message: 'Debe contener al menos un carácter especial' },
-    { regex: /[A-Z]/, message: 'Debe contener al menos una letra mayúscula' },
-    { regex: chemicalElementRegex, message: 'Debe contener al menos un elemento químico' },
-    { regex: eggEmojiRegex, message: 'Debe contener al menos un emoji de huevo' },
-    { regex: spotlightNextToEggEmojiRegex, message: 'Debe contener un emoji de huevo y un emoji de foco juntos' }
-  ],
-  refineRules: [
-    {
-      test: (value) => {
-        // Se extraen todos los dígitos y se suman
-        export const numbers = value.match(/\d/g) || [];
-        export const sum = numbers.reduce((acc, digit) => acc + parseInt(digit, 10), 0);
-        return sum === 100;
-      },
-      message: 'La suma de los dígitos debe ser 100'
-    }
-  ],
-});
+	max(length: number, message?: string) {
+		this._max = length;
+		if (message) this._maxMessage = message;
+		return this;
+	}
 
-// face 9 the password must have the name of one pokemon legendaries of the third generation (First letter in uppercase)
-export const legendaryPokemonRegex = /Regice|Registeel|Regirock|Latias|Latios|Kyogre|Groudon|Rayquaza|Jirachi|Deoxys/
-export const passwordPhase9 = createPasswordSchema({
-  minLength: 6,
-  regexRules: [
-    { regex: /\d/, message: 'Debe contener al menos un número' },
-    { regex: /\W/, message: 'Debe contener al menos un carácter especial' },
-    { regex: /[A-Z]/, message: 'Debe contener al menos una letra mayúscula' },
-    { regex: chemicalElementRegex, message: 'Debe contener al menos un elemento químico' },
-    { regex: eggEmojiRegex, message: 'Debe contener al menos un emoji de huevo' },
-    { regex: spotlightNextToEggEmojiRegex, message: 'Debe contener un emoji de huevo y un emoji de foco juntos' },
-    { regex: legendaryPokemonRegex, message: 'Debe contener el nombre de un pokemon legendario de la tercera generación (Primera letra en mayúscula)' }
-  ],
-  refineRules: [
-    {
-      test: (value) => {
-        // Se extraen todos los dígitos y se suman
-        export const numbers = value.match(/\d/g) || [];
-        export const sum = numbers.reduce((acc, digit) => acc + parseInt(digit, 10), 0);
-        return sum === 100;
-      },
-      message: 'La suma de los dígitos debe ser 100'
-    }
-  ],
-});
+	regex(pattern: RegExp, message?: string) {
+		this._regex = pattern;
+		if (message) this._regexMessage = message;
+		return this;
+	}
 
-// face 10 the password must have a multiply whose result in 35 with Japanese numbers
-export const japaneseNumberRegex = /一|二|三|四|五|六|七|八|九|十/
-export const multiplyWith35Regex = /三五|五三/
+	refine(callback: (value: string) => boolean, message?: string) {
+		this._refines.push(callback);
+		if (message) this._refineMessage = message;
+		return this;
+	}
 
-export const passwordPhase10 = createPasswordSchema({
-  minLength: 6,
-  regexRules: [
-    { regex: /\d/, message: 'Debe contener al menos un número' },
-    { regex: /\W/, message: 'Debe contener al menos un carácter especial' },
-    { regex: /[A-Z]/, message: 'Debe contener al menos una letra mayúscula' },
-    { regex: chemicalElementRegex, message: 'Debe contener al menos un elemento químico' },
-    { regex: eggEmojiRegex, message: 'Debe contener al menos un emoji de huevo' },
-    { regex: spotlightNextToEggEmojiRegex, message: 'Debe contener un emoji de huevo y un emoji de foco juntos' },
-    { regex: legendaryPokemonRegex, message: 'Debe contener el nombre de un pokemon legendario de la tercera generación (Primera letra en mayúscula)' },
-    { regex: japaneseNumberRegex, message: 'Debe contener un número en japonés' },
-    { regex: multiplyWith35Regex, message: 'Debe contener una multiplicación cuyo resultado sea 35' }
-  ],
-  refineRules: [
-    {
-      test: (value) => {
-        // Se extraen todos los dígitos y se suman
-        export const numbers = value.match(/\d/g) || [];
-        export const sum = numbers.reduce((acc, digit) => acc + parseInt(digit, 10), 0);
-        return sum === 100;
-      },
-      message: 'La suma de los dígitos debe ser 100'
-    }
-  ],
-});
-export const passwordPhase11 = createPasswordSchema({
-  minLength: 6,
-  regexRules: [
-    { regex: /\d/, message: 'Debe contener al menos un número' },
-    { regex: /\W/, message: 'Debe contener al menos un carácter especial' },
-    { regex: /[A-Z]/, message: 'Debe contener al menos una letra mayúscula' },
-    { regex: chemicalElementRegex, message: 'Debe contener al menos un elemento químico' },
-    { regex: eggEmojiRegex, message: 'Debe contener al menos un emoji de huevo' },
-    { regex: spotlightNextToEggEmojiRegex, message: 'Debe contener un emoji de huevo y un emoji de foco juntos' },
-    { regex: legendaryPokemonRegex, message: 'Debe contener el nombre de un pokemon legendario de la tercera generación (Primera letra en mayúscula)' },
-    { regex: japaneseNumberRegex, message: 'Debe contener un número en japonés' },
-    { regex: multiplyWith35Regex, message: 'Debe contener una multiplicación cuyo resultado sea 35' }
-  ],
-  refineRules: [
-    {
-      test: (value) => {
-        // Se extraen todos los dígitos y se suman
-        export const numbers = value.match(/\d/g) || [];
-        export const sum = numbers.reduce((acc, digit) => acc + parseInt(digit, 10), 0);
-        return sum === 100;
-      },
-      message: 'La suma de los dígitos debe ser 100'
-    }
-  ],
-});
+	parse(value: unknown): Result<string> {
+		const errors: LinError[] = [];
 
-// face 12 now the egg was born 
+		if (typeof value !== 'string') {
+			errors.push({
+				code: 'invalid_type',
+				message: 'Expected string',
+				type: 'string',
+				path: ''
+			});
+		} else {
+			if (this._min !== undefined && value.length < this._min) {
+				errors.push({
+					code: 'too_short',
+					message: this._minMessage.replace(
+						'{min}',
+						String(this._min)
+					),
+					type: 'string',
+					path: ''
+				});
+			}
+			if (this._max !== undefined && value.length > this._max) {
+				errors.push({
+					code: 'too_long',
+					message: this._maxMessage.replace(
+						'{max}',
+						String(this._max)
+					),
+					type: 'string',
+					path: ''
+				});
+			}
+			if (this._regex && !this._regex.test(value)) {
+				errors.push({
+					code: 'invalid_format',
+					message: this._regexMessage,
+					type: 'string',
+					path: ''
+				});
+			}
+
+			// Aplicar refinamientos personalizados
+			for (const refine of this._refines) {
+				if (!refine(value)) {
+					errors.push({
+						code: 'refine_failed',
+						message: this._refineMessage,
+						type: 'string',
+						path: ''
+					});
+				}
+			}
+		}
+		return errors.length > 0
+			? { isValid: false, errors }
+			: { isValid: true, data: value as string };
+	}
+}
+
+const schema1 = L.String()
+	.min(3)
+	.max(10)
+	.regex(/^[a-zA-Z0-9]+$/);
+const schema2 = L.String()
+	.min(3)
+	.max(10)
+	.regex(/^[a-zA-Z0-9]+$/)
+	.refine(value => value === '123', 'EL VALOR NO ES 123');
+
+const resultados = L.MultiParse(
+	{ value: 'abc123', schema: schema1, fase: 'fase1' },
+	{ value: '123l', schema: schema2, fase: 'fase2' }
+);
+
+console.log(resultados);
